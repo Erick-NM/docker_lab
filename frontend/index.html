@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Agenda de Contactos interactiva</title>
+  <style>
+    /* Estilos */
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f1f5f9;
+      text-align: center;
+      padding: 20px;
+    }
+    .tarjeta {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      display: inline-block;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    input {
+      padding: 8px 12px;
+      margin: 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    button {
+      background: #2563eb;
+      color: white;
+      padding: 9px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    button:hover {
+      background: #1d4ed8;
+    }
+    .btn-delete {
+      background: #ef4444;
+      padding: 5px 10px;
+      font-size: 12px;
+    }
+    .btn-delete:hover {
+      background: #b91c1c;
+    }
+    table {
+      margin: 10px auto;
+      width: 75%;
+      background: white;
+      border-collapse: collapse;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 12px;
+      border: 1px solid #ddd;
+      text-align: left;
+    }
+    th {
+      background: #0f172a;
+      color: white;
+    }
+    tr:nth-child(even) {
+      background-color: #f8fafc;
+    }
+    .alerta {
+      padding: 10px;
+      margin: 10px auto;
+      width: 60%;
+      border-radius: 4px;
+      display: none;
+      font-weight: bold;
+    }
+    .alerta-exito {
+      background-color: #dcfce7;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+    .alerta-error {
+      background-color: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+    .busqueda-caja {
+      margin: 15px auto;
+      width: 75%;
+      text-align: right;
+    }
+    .busqueda-caja input {
+      width: 260px;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Directorio Corporativo - Agenda de Contactos</h2>
+
+  <div id="alerta" class="alerta"></div>
+
+  <!-- Formulario Web -->
+  <div class="tarjeta">
+    <h3>Registrar Nuevo Contacto</h3>
+    <input type="text" id="nombre" placeholder="Nombre completo" required>
+    <input type="text" id="telefono" placeholder="Teléfono/Extensión" required>
+    <input type="text" id="departamento" placeholder="Departamento" required>
+    <button onclick="guardarContacto()">Guardar Contacto</button>
+  </div>
+
+  <div class="busqueda-caja">
+    <input type="text" id="filtro" placeholder="🔍 Buscar por nombre, telf o dep..." onkeyup="filtrarContactos()">
+  </div>
+
+  <!-- Tabla Dinámica -->
+  <table id="tablaContactos">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Nombre</th>
+        <th>Teléfono</th>
+        <th>Departamento</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody id="cuerpoTabla">
+      <!-- Mediante JS se ingresan los datos aquí sin recargar la página -->
+    </tbody>
+  </table>
+
+  <script>
+    // ===> [SEÑAL: RUTA DE LA API EN PYTHON] <===
+    const API_URL = "http://localhost:5000/api/contactos";
+    let listaContactos = [];
+
+    function mostrarMensaje(texto, tipo = "exito") {
+      const el = document.getElementById("alerta");
+      el.className = `alerta alerta-${tipo}`;
+      el.textContent = texto;
+      el.style.display = "block";
+      setTimeout(() => { el.style.display = "none"; }, 4000);
+    }
+
+    // 1: Consumir la API para leer datos
+    async function cargarContactos() {
+      try {
+        const respuesta = await fetch(API_URL);
+        if (!respuesta.ok) throw new Error("Error en el servidor al cargar");
+        listaContactos = await respuesta.json();
+        renderizarTabla(listaContactos);
+      } catch (error) {
+        console.error("Error al cargar contactos:", error);
+        document.getElementById("cuerpoTabla").innerHTML = `<tr><td colspan="5" style="text-align:center; color: #dc2626;">No se pudo conectar con el backend (http://localhost:5000). Verifique que los contenedores estén corriendo.</td></tr>`;
+      }
+    }
+
+    function renderizarTabla(contactos) {
+      let html = "";
+      if (contactos.length === 0) {
+        html = `<tr><td colspan="5" style="text-align:center; color: #64748b;">No se encontraron contactos registrados.</td></tr>`;
+      } else {
+        contactos.forEach(contacto => {
+          html += `<tr>
+                    <td>${contacto.id}</td>
+                    <td><strong>${contacto.nombre}</strong></td>
+                    <td>${contacto.telefono}</td>
+                    <td>${contacto.departamento}</td>
+                    <td><button class="btn-delete" onclick="eliminarContacto(${contacto.id})">Eliminar</button></td>
+                   </tr>`;
+        });
+      }
+      document.getElementById("cuerpoTabla").innerHTML = html;
+    }
+
+    // 2: Enviar datos a la API en Python
+    async function guardarContacto() {
+      const nombre = document.getElementById("nombre").value.trim();
+      const telefono = document.getElementById("telefono").value.trim();
+      const departamento = document.getElementById("departamento").value.trim();
+
+      if (!nombre || !telefono || !departamento) {
+        mostrarMensaje("Por favor, completa todos los campos requeridos.", "error");
+        return;
+      }
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nombre, telefono, departamento })
+        });
+
+        if (res.ok) {
+          mostrarMensaje("¡Contacto registrado exitosamente!");
+          document.getElementById("nombre").value = "";
+          document.getElementById("telefono").value = "";
+          document.getElementById("departamento").value = "";
+          cargarContactos();
+        } else {
+          const err = await res.json();
+          mostrarMensaje("Error al guardar: " + (err.error || "Desconocido"), "error");
+        }
+      } catch (error) {
+        mostrarMensaje("Error de conexión con el backend", "error");
+      }
+    }
+
+    // 3: Eliminar contacto
+    async function eliminarContacto(id) {
+      if (!confirm("¿Estás seguro de que deseas eliminar este contacto?")) return;
+      try {
+        const res = await fetch(`${API_URL}/${id}`, { method: "DELETE" });
+        if (res.ok) {
+          mostrarMensaje("Contacto eliminado correctamente.");
+          cargarContactos();
+        } else {
+          mostrarMensaje("No se pudo eliminar el contacto.", "error");
+        }
+      } catch (error) {
+        mostrarMensaje("Error de red al eliminar contacto.", "error");
+      }
+    }
+
+    // 4: Filtrado en tiempo real
+    function filtrarContactos() {
+      const texto = document.getElementById("filtro").value.toLowerCase();
+      const filtrados = listaContactos.filter(c => 
+        c.nombre.toLowerCase().includes(texto) ||
+        c.telefono.toLowerCase().includes(texto) ||
+        c.departamento.toLowerCase().includes(texto)
+      );
+      renderizarTabla(filtrados);
+    }
+
+    // Cargar los contactos apenas se abre la página
+    cargarContactos();
+  </script>
+</body>
+</html>

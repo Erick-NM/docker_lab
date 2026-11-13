@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # ========================================================
+  # 1. Base de Datos Relacional (MySQL 8.0)
+  # ========================================================
+  db-backend:
+    image: mysql:8.0
+    container_name: agenda_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      # Persistencia de datos de MySQL en el host
+      - db_data:/var/lib/mysql
+      # Script de inicialización automática al primer arranque
+      - ./database/database.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - red_agenda
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ========================================================
+  # 2. Backend API REST (Python / Flask)
+  # ========================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: agenda_backend
+    restart: always
+    environment:
+      DB_HOST: db-backend
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_PORT: 3306
+      PORT: 5000
+    ports:
+      - "${BACKEND_PORT:-5000}:5000"
+    depends_on:
+      db-backend:
+        condition: service_healthy
+    networks:
+      - red_agenda
+
+  # ========================================================
+  # 3. Frontend Web Server (Nginx)
+  # ========================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: agenda_frontend
+    restart: always
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - backend
+    networks:
+      - red_agenda
+
+# ========================================================
+# Red Virtual Bridge (Interconexión segura entre contenedores)
+# ========================================================
+networks:
+  red_agenda:
+    driver: bridge
+
+# ========================================================
+# Volumen Persistente (No se pierden los datos al apagar el contenedor)
+# ========================================================
+volumes:
+  db_data:
+    driver: local
